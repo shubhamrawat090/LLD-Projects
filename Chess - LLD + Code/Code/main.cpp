@@ -3,6 +3,7 @@
 #include <cctype>
 #include <stdexcept>
 #include <vector>
+#include <cstdlib>
 
 using namespace std;
 
@@ -35,6 +36,8 @@ public:
         this->isWhitePiece = isWhitePiece;
         this->movementStrategy = movementStrategy;
     }
+
+    virtual char getSymbol() = 0;
 
     virtual ~Piece()
     {
@@ -128,11 +131,17 @@ public:
 // Individual Movement Strategies - END
 
 // Individual Pieces - START
+
 class King : public Piece
 {
 public:
     King(bool isWhitePiece)
         : Piece(isWhitePiece, new KingMovementStrategy()) {}
+
+    char getSymbol() override
+    {
+        return isWhite() ? 'K' : 'k';
+    }
 };
 
 class Queen : public Piece
@@ -140,6 +149,11 @@ class Queen : public Piece
 public:
     Queen(bool isWhitePiece)
         : Piece(isWhitePiece, new QueenMovementStrategy()) {}
+
+    char getSymbol() override
+    {
+        return isWhite() ? 'Q' : 'q';
+    }
 };
 
 class Bishop : public Piece
@@ -147,6 +161,11 @@ class Bishop : public Piece
 public:
     Bishop(bool isWhitePiece)
         : Piece(isWhitePiece, new BishopMovementStrategy()) {}
+
+    char getSymbol() override
+    {
+        return isWhite() ? 'B' : 'b';
+    }
 };
 
 class Knight : public Piece
@@ -154,6 +173,11 @@ class Knight : public Piece
 public:
     Knight(bool isWhitePiece)
         : Piece(isWhitePiece, new KnightMovementStrategy()) {}
+
+    char getSymbol() override
+    {
+        return isWhite() ? 'N' : 'n';
+    }
 };
 
 class Rook : public Piece
@@ -161,6 +185,11 @@ class Rook : public Piece
 public:
     Rook(bool isWhitePiece)
         : Piece(isWhitePiece, new RookMovementStrategy()) {}
+
+    char getSymbol() override
+    {
+        return isWhite() ? 'R' : 'r';
+    }
 };
 
 class Pawn : public Piece
@@ -168,7 +197,13 @@ class Pawn : public Piece
 public:
     Pawn(bool isWhitePiece)
         : Piece(isWhitePiece, new PawnMovementStrategy()) {}
+
+    char getSymbol() override
+    {
+        return isWhite() ? 'P' : 'p';
+    }
 };
+
 // Individual Pieces - END
 
 string toLowercase(string str)
@@ -179,6 +214,26 @@ string toLowercase(string str)
             tolower(static_cast<unsigned char>(c)));
     }
     return str;
+}
+
+bool parsePosition(string position, int &row, int &col)
+{
+    // Convert input to lowercase
+    position = toLowercase(position);
+
+    // Validate input length
+    if (position.length() != 2)
+        return false;
+
+    // Validate file (a-h) and rank (1-8)
+    if (position[0] < 'a' || position[0] > 'h' ||
+        position[1] < '1' || position[1] > '8')
+        return false;
+
+    col = position[0] - 'a';
+    row = position[1] - '1';
+
+    return true;
 }
 
 // Piece Factory - responsible for creation of pieces
@@ -351,6 +406,36 @@ public:
 
         return board[row][col];
     }
+
+    void displayBoard()
+    {
+        cout << "\n    a   b   c   d   e   f   g   h\n";
+        cout << "  +---+---+---+---+---+---+---+---+\n";
+
+        for (int row = 7; row >= 0; row--)
+        {
+            cout << row + 1 << " |";
+
+            for (int col = 0; col < 8; col++)
+            {
+                Piece *piece = board[row][col]->getPiece();
+
+                if (piece == nullptr)
+                {
+                    cout << "   |";
+                }
+                else
+                {
+                    cout << " " << piece->getSymbol() << " |";
+                }
+            }
+
+            cout << " " << row + 1 << "\n";
+            cout << "  +---+---+---+---+---+---+---+---+\n";
+        }
+
+        cout << "    a   b   c   d   e   f   g   h\n\n";
+    }
 };
 
 enum class Status
@@ -366,13 +451,13 @@ class Player
 {
 private:
     string name;
-    bool isWhiteSide;
+    bool whiteSide;
 
 public:
     Player(string name, bool isWhiteSide)
     {
         this->name = name;
-        this->isWhiteSide = isWhiteSide;
+        this->whiteSide = isWhiteSide;
     }
 
     string getName()
@@ -382,7 +467,7 @@ public:
 
     bool isWhiteSide()
     {
-        return isWhiteSide;
+        return whiteSide;
     }
 };
 
@@ -405,7 +490,7 @@ private:
     Player *player2;
 
     bool isWhiteTurn;
-    vector<Move *> gameLog;
+    vector<Move> gameLog;
     Status status;
 
 public:
@@ -426,96 +511,148 @@ public:
     {
         while (this->status == Status::ACTIVE)
         {
-            int startRow, startCol, endRow, endCol;
+            // Clear terminal screen
+            system("cls");
+
+            // Display current board
+            board->displayBoard();
+
+            // Display current player's turn
+            Player *currentPlayer = isWhiteTurn ? player1 : player2;
 
             cout << "\n"
-                 << (isWhiteTurn ? "White" : "Black")
-                 << "'s turn\n";
+                 << currentPlayer->getName()
+                 << (isWhiteTurn ? " (White)" : " (Black)")
+                 << " to move.\n";
 
-            cout << "Enter starting position (row col): ";
-            cin >> startRow >> startCol;
+            string startPosition, endPosition;
 
-            cout << "Enter destination position (row col): ";
-            cin >> endRow >> endCol;
+            cout << "\nEnter starting position (e.g. e2): ";
+            cin >> startPosition;
 
-            Cell *startCell = board->getCell(startRow, startCol);
-            Cell *endCell = board->getCell(endRow, endCol);
+            // Allow user to quit
+            if (toLowercase(startPosition) == "q")
+                break;
 
-            if (startCell == nullptr || endCell == nullptr)
+            cout << "Enter destination position (e.g. e4): ";
+            cin >> endPosition;
+
+            // Convert chess notation into board coordinates
+            int startRow, startCol;
+            int endRow, endCol;
+
+            if (!parsePosition(startPosition, startRow, startCol) ||
+                !parsePosition(endPosition, endRow, endCol))
             {
-                cout << "Invalid board position!\n";
+                cout << "\nInvalid position! Please enter coordinates between a1 and h8.\n";
+                system("pause");
                 continue;
             }
 
+            // Retrieve corresponding cells
+            Cell *startCell = board->getCell(startRow, startCol);
+            Cell *endCell = board->getCell(endRow, endCol);
+
+            // Create move
             Move *move = new Move(startCell, endCell);
 
-            makeMove(move, isWhiteTurn ? player1 : player2);
-        }
+            // Execute move
+            bool success = makeMove(move, currentPlayer);
 
-        cout << "Game Over!\n";
-    }
+            delete move;
 
-    void makeMove(Move *move, Player *player)
-    {
-        // Initial check for a valid move
-        // To check if source and destination don't contain the same color pieces
-        if (move->isValid())
-        {
-            Piece *sourcePiece = move->getStartCell()->getPiece();
-
-            // Check if the source piece can be moved or not
-            if (sourcePiece->canMove(this->board, move->getStartCell(), move->getEndCell()))
+            if (!success)
             {
-                Piece *destinationPiece = move->getEndCell()->getPiece();
-
-                // Check if the destination cell contains some piece
-                if (destinationPiece != nullptr)
-                {
-                    // If the destination cell contains King and currently white is playing
-                    //     --> White wins
-                    if (dynamic_cast<King *>(destinationPiece) != nullptr && isWhiteTurn)
-                    {
-                        this->status = Status::WHITE_WIN;
-                        return;
-                    }
-
-                    // If the destination cell contains King and currently Black is playing
-                    //     --> Black wins
-                    if (dynamic_cast<King *>(destinationPiece) != nullptr && !isWhiteTurn)
-                    {
-                        this->status = Status::BLACK_WIN;
-                        return;
-                    }
-
-                    // Set the destination piece as killed
-                    destinationPiece->setKilled(true);
-                }
-
-                // Adding the valid move to the game logs
-                gameLog.push_back(move);
-                // Moving the source piece to the destination cell
-                move->getEndCell()->setPiece(sourcePiece);
-                // Setting the source cell to null (means it doesn't have any piece)
-                move->getStartCell()->setPiece(nullptr);
-
-                // Toggling the turn
-                isWhiteTurn = !isWhiteTurn;
+                system("pause");
             }
         }
+
+        system("cls");
+        board->displayBoard();
+
+        cout << "\nGame Over!\n";
+    }
+
+    bool makeMove(Move *move, Player *player)
+    {
+        // Get source piece
+        Piece *sourcePiece = move->getStartCell()->getPiece();
+
+        // Check whether source cell contains a piece
+        if (sourcePiece == nullptr)
+        {
+            cout << "\nInvalid move: No piece at starting position.\n";
+            return false;
+        }
+
+        // Check whether the piece belongs to the current player
+        if (sourcePiece->isWhite() != player->isWhiteSide())
+        {
+            cout << "\nInvalid move: You cannot move your opponent's piece.\n";
+            return false;
+        }
+
+        // Validate source and destination
+        if (!move->isValid())
+        {
+            cout << "\nInvalid move: You cannot capture your own piece.\n";
+            return false;
+        }
+
+        // Check whether the piece can move to the destination
+        if (!sourcePiece->canMove(
+                this->board,
+                move->getStartCell(),
+                move->getEndCell()))
+        {
+            cout << "\nInvalid move: Piece cannot move to that position.\n";
+            return false;
+        }
+
+        Piece *destinationPiece = move->getEndCell()->getPiece();
+
+        // Check if the destination contains the opponent's King
+        if (dynamic_cast<King *>(destinationPiece) != nullptr)
+        {
+            this->status = isWhiteTurn
+                               ? Status::WHITE_WIN
+                               : Status::BLACK_WIN;
+
+            return true;
+        }
+
+        // Capture destination piece if present
+        if (destinationPiece != nullptr)
+        {
+            destinationPiece->setKilled(true);
+        }
+
+        // Store move in game log
+        gameLog.push_back(*move);
+
+        // Move the piece
+        move->getEndCell()->setPiece(sourcePiece);
+        move->getStartCell()->setPiece(nullptr);
+
+        // Switch turn
+        isWhiteTurn = !isWhiteTurn;
+
+        return true;
     }
 };
 
 int main()
 {
-    // Create Players
-    Player *player1 = new Player("Player1", true);  // White
-    Player *player2 = new Player("Player2", false); // Black
+    Player *player1 = new Player("Player1", true);
+    Player *player2 = new Player("Player2", false);
 
-    // Initialize game
     Game *chessGame = new Game(player1, player2);
 
-    // Start the game
     chessGame->start();
+
+    delete chessGame;
+    delete player1;
+    delete player2;
 
     return 0;
 }
